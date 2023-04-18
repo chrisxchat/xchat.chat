@@ -4,14 +4,17 @@ import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.dto.ChatGptResponse;
 import chat.xchat.dto.ChoiceDto;
 import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.amazonaws.services.sns.AmazonSNSClientBuilder;
 import com.amazonaws.services.sns.model.PublishRequest;
 import com.amazonaws.util.CollectionUtils;
+import com.amazonaws.util.StringUtils;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
@@ -51,28 +54,71 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent()
 				.withHeaders(headers);
-		String tgMessage = gson.fromJson(input.getBody(), JsonObject.class).getAsJsonObject("message").get("text").getAsString();
-		if (!tgMessage.contains("@xchat_dev_bot")) {
+
+		Map<String, String> queryStringParameters = input.getQueryStringParameters();
+		LambdaLogger logger = context.getLogger();
+		if (queryStringParameters == null || queryStringParameters.isEmpty()) {
+			String message = extractMessage(input.getBody());
+			String phone = extractPhoneNumber(input.getBody());
+			try {
+				String chatGptResponse = askChatGpt(message);
+				sendWhatsappMessage(chatGptResponse, phone);
+			} catch (IOException | InterruptedException e) {
+				logger.log(e.getMessage());
+				return response
+						.withStatusCode(500);
+			}
 			return response
 					.withStatusCode(200);
+		} else {
+			String verifyToken = "VERIFY_TOKEN";
+			String hubMode = queryStringParameters.get("hub.mode");
+			String hubVerifyToken = queryStringParameters.get("hub.verify_token");
+			String hubChallenge = queryStringParameters.get("hub.challenge");
+			if (!StringUtils.isNullOrEmpty(hubMode) && !StringUtils.isNullOrEmpty(hubVerifyToken)) {
+				if ("subscribe".equals(hubMode) && verifyToken.equals(hubVerifyToken)) {
+					return response
+							.withStatusCode(200)
+							.withBody(hubChallenge);
+				} else {
+					return response.withStatusCode(403);
+				}
+			}
 		}
-		try {
-			String message = tgMessage.replaceAll("@xchat_dev_bot", "");
-			String text = askChatGpt(message);
-//			sendSms("+380933506675", text);
-			sendTelegramMessage(text);
-			return response
-					.withStatusCode(200)
-					.withBody(text);
-		} catch (InterruptedException | IOException e) {
-			return response
-					.withBody("{}")
-					.withStatusCode(500);
-		}
+		return response.withStatusCode(200);
+	}
+
+	private String extractMessage(String body) {
+		JsonObject jsonObject = new JsonParser().parse(body).getAsJsonObject();
+		return jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
+				.getAsJsonArray("changes").get(0).getAsJsonObject()
+				.get("value").getAsJsonObject()
+				.getAsJsonArray("messages").get(0).getAsJsonObject()
+				.get("text").getAsJsonObject()
+				.get("body").getAsString();
+	}
+
+	private String extractPhoneNumber(String body) {
+		JsonObject jsonObject = new JsonParser().parse(body).getAsJsonObject();
+		return jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
+				.getAsJsonArray("changes").get(0).getAsJsonObject()
+				.get("value").getAsJsonObject()
+				.getAsJsonArray("messages").get(0).getAsJsonObject()
+				.get("from").getAsString();
+	}
+
+	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
+		String requestBody = "{ \"messaging_product\": \"whatsapp\", \"to\": \"" + phone + "\", \"type\": \"text\", \"text\": { \"body\": \"" + message + "\" } }";
+		client.send(HttpRequest.newBuilder()
+				.uri(URI.create("https://graph.facebook.com/v16.0/106487262422291/messages"))
+				.header("Content-Type", "application/json")
+				.header("Authorization", "Bearer " + getWhatsappToken())
+				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
+				.build(), HttpResponse.BodyHandlers.ofString());
 	}
 
 	private void sendTelegramMessage(String text) throws IOException {
-		String textEncoded = URLEncoder.encode(text, StandardCharsets.UTF_8);;
+		String textEncoded = URLEncoder.encode(text, StandardCharsets.UTF_8);
 		String tgToken = getTelegramBotToken();
 		String chatId = "-944418211";
 		String urlString = "https://api.telegram.org/bot" + tgToken + "/sendMessage?chat_id=" + chatId + "&text=" + textEncoded;
@@ -104,6 +150,8 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 				.map(choices -> CollectionUtils.isNullOrEmpty(choices) ? null : choices.get(0))
 				.map(ChoiceDto::getText)
 				.map(String::strip)
+				.map(text -> text.replaceAll("\"", ""))
+				.map(text -> text.replaceAll("\n", ""))
 				.orElse(res.body());
 	}
 
@@ -112,6 +160,10 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 			return null;
 		}
 		return gson.fromJson(json, ChatGptResponse.class);
+	}
+
+	private String getWhatsappToken() {
+		return getSecret("WhatsappDev");
 	}
 
 	private String getChatGptApiKey() {
