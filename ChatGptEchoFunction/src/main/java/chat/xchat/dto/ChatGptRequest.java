@@ -6,7 +6,7 @@ public class ChatGptRequest {
 	/*
 	"{\"model\": \"text-davinci-003\", \"prompt\": \"how to play golf?\", \"temperature\": 1, \"max_tokens\": 15}"
 	 */
-	private String model = "text-davinci-003";
+	private String model = "gpt-3.5-turbo-0301";
 	private String prompt;
 	private Integer temperature = 1;
 	private Integer max_tokens = 15;
