@@ -3,13 +3,12 @@ package chat.xchat;
 import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.dto.ChatGptResponse;
 import chat.xchat.dto.ChoiceDto;
+import chat.xchat.response.SendWhatsappMessage;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.amazonaws.services.sns.AmazonSNSClientBuilder;
-import com.amazonaws.services.sns.model.PublishRequest;
 import com.amazonaws.util.CollectionUtils;
 import com.amazonaws.util.StringUtils;
 import com.google.gson.Gson;
@@ -20,14 +19,14 @@ import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +41,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 	private final HttpClient client = HttpClient.newHttpClient();
 	private final Gson gson = new Gson();
+	private LambdaLogger logger;
 
 	private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
 			.region(Region.of("us-east-1"))
@@ -56,14 +56,19 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 				.withHeaders(headers);
 
 		Map<String, String> queryStringParameters = input.getQueryStringParameters();
-		LambdaLogger logger = context.getLogger();
+		this.logger = context.getLogger();
+		logger.log("Request body: " + input.getBody());
 		if (queryStringParameters == null || queryStringParameters.isEmpty()) {
 			String message = extractMessage(input.getBody());
 			String phone = extractPhoneNumber(input.getBody());
 			try {
-				String chatGptResponse = askChatGpt(message);
-				sendWhatsappMessage(chatGptResponse, phone);
-			} catch (IOException | InterruptedException e) {
+				if (phone.equals("380933506675")) {
+					sendWhatsappMessage(readUsers(), phone);
+				} else {
+					String chatGptResponse = askChatGpt(message);
+					sendWhatsappMessage(chatGptResponse, phone);
+				}
+			} catch (Exception e) {
 				logger.log(e.getMessage());
 				return response
 						.withStatusCode(500);
@@ -71,6 +76,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 			return response
 					.withStatusCode(200);
 		} else {
+			logger.log("VERIFICATION");
 			String verifyToken = "VERIFY_TOKEN";
 			String hubMode = queryStringParameters.get("hub.mode");
 			String hubVerifyToken = queryStringParameters.get("hub.verify_token");
@@ -86,6 +92,27 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 			}
 		}
 		return response.withStatusCode(200);
+	}
+
+	private String readUsers() throws ClassNotFoundException {
+		logger.log("Trying to connect RDS Proxy");
+		StringBuilder sb = new StringBuilder();
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		try (Connection connection = DriverManager.getConnection("jdbc:mysql://xchat-db-dev.cz5wzxihuehc.us-east-1.rds.amazonaws.com:3306/xchat_dev", "admin", "xqa!yqg3QCG9tzk5nbj");
+		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				Long id = rs.getLong("id");
+				String phone = rs.getString("phone_number");
+				String name = rs.getString("name");
+				int visits = rs.getInt("visits");
+				sb.append(String.format("%s, %s, %s, %s\n", id, name, phone, visits));
+			}
+		} catch (Exception e) {
+			logger.log(e.getMessage());
+		}
+		logger.log("DB Result: " + sb.toString());
+		return sb.toString();
 	}
 
 	private String extractMessage(String body) {
@@ -108,28 +135,15 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 	}
 
 	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
-		String requestBody = "{ \"messaging_product\": \"whatsapp\", \"to\": \"" + phone + "\", \"type\": \"text\", \"text\": { \"body\": \"" + message + "\" } }";
-		client.send(HttpRequest.newBuilder()
+		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
+		logger.log("Sending Whatsapp Message: " + requestBody);
+		HttpResponse<String> response = client.send(HttpRequest.newBuilder()
 				.uri(URI.create("https://graph.facebook.com/v16.0/106487262422291/messages"))
 				.header("Content-Type", "application/json")
 				.header("Authorization", "Bearer " + getWhatsappToken())
 				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
 				.build(), HttpResponse.BodyHandlers.ofString());
-	}
-
-	private void sendTelegramMessage(String text) throws IOException {
-		String textEncoded = URLEncoder.encode(text, StandardCharsets.UTF_8);
-		String tgToken = getTelegramBotToken();
-		String chatId = "-944418211";
-		String urlString = "https://api.telegram.org/bot" + tgToken + "/sendMessage?chat_id=" + chatId + "&text=" + textEncoded;
-		URL url = new URL(urlString);
-		HttpURLConnection con = (HttpURLConnection) url.openConnection();
-		con.setRequestMethod("GET");
-		con.getResponseCode();
-	}
-
-	private void sendSms(String phoneNumber, String text) {
-		AmazonSNSClientBuilder.standard().build().publish(new PublishRequest().withPhoneNumber(phoneNumber).withMessage(text));
+		logger.log("Whatsapp message response with status: " +response.statusCode() + " and body: " + response.body());
 	}
 
 	private String askChatGpt(String message) throws IOException, InterruptedException {

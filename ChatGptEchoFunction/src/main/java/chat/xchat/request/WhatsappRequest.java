@@ -30,7 +30,7 @@ public class WhatsappRequest {
 	                                "id": "wamid.HBgMMzgwOTMzNTA2Njc1FQIAEhggRDlEQ0Y0RTc4MTg3QkQzNTdDOENGNkU3MTdFNzgwQTIA",
 	                                "timestamp": "1681403268",
 	                                "text": {
-	                                    "body": "Еее"
+	                                    "body": "Hello! How are you?"
 	                                },
 	                                "type": "text"
 	                            }
