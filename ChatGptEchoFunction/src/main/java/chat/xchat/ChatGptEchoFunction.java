@@ -1,7 +1,7 @@
 package chat.xchat;
 
+import chat.xchat.dto.AwsSecret;
 import chat.xchat.dto.ChatGptRequest;
-import chat.xchat.dto.ChatGptResponse;
 import chat.xchat.response.SendWhatsappMessage;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
@@ -28,12 +28,7 @@ import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Handler for requests to Lambda function.
- * TODO:
- * 1. Attach database to store message history
- * 2. Trigger this lambda by SNS when AWS Pinpoint phone number registered
- */
+
 public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
 	private final HttpClient client = HttpClient.newHttpClient();
@@ -52,50 +47,56 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent()
 				.withHeaders(headers);
 
-		Map<String, String> queryStringParameters = input.getQueryStringParameters();
+		Map<String, String> queryParams = input.getQueryStringParameters();
 		this.logger = context.getLogger();
 		logger.log("Request body: " + input.getBody());
-		if (queryStringParameters == null || queryStringParameters.isEmpty()) {
-			String message = extractMessage(input.getBody());
-			String phone = extractPhoneNumber(input.getBody());
-			try {
-				if (phone.equals("380933506675") && message.equals("Read")) {
-					sendWhatsappMessage(readUsers(), phone);
-				} else {
-					String chatGptResponse = askChatGpt(message);
-					sendWhatsappMessage(chatGptResponse, phone);
-				}
-			} catch (Exception e) {
-				logger.log(e.getMessage());
-				return response
-						.withStatusCode(500);
+		if (queryParams == null || queryParams.isEmpty()) {
+			return handleUserRequest(input, response);
+		}
+		return establishWebhookConnection(response, queryParams);
+	}
+
+	private APIGatewayProxyResponseEvent handleUserRequest(APIGatewayProxyRequestEvent input, APIGatewayProxyResponseEvent response) {
+		String message = extractMessage(input.getBody());
+		String phone = extractPhoneNumber(input.getBody());
+		try {
+			if (phone.equals("380933506675") && message.equals("Read")) {
+				sendWhatsappMessage(readUsers(), phone);
+			} else {
+				String chatGptResponse = askChatGpt(message);
+				sendWhatsappMessage(chatGptResponse, phone);
 			}
-			return response
-					.withStatusCode(200);
-		} else {
-			logger.log("VERIFICATION");
-			String verifyToken = "VERIFY_TOKEN";
-			String hubMode = queryStringParameters.get("hub.mode");
-			String hubVerifyToken = queryStringParameters.get("hub.verify_token");
-			String hubChallenge = queryStringParameters.get("hub.challenge");
-			if (!StringUtils.isNullOrEmpty(hubMode) && !StringUtils.isNullOrEmpty(hubVerifyToken)) {
-				if ("subscribe".equals(hubMode) && verifyToken.equals(hubVerifyToken)) {
-					return response
-							.withStatusCode(200)
-							.withBody(hubChallenge);
-				} else {
-					return response.withStatusCode(403);
-				}
-			}
+		} catch (Exception e) {
+			logger.log(e.getMessage());
+			return response.withStatusCode(500);
 		}
 		return response.withStatusCode(200);
 	}
 
+	private APIGatewayProxyResponseEvent establishWebhookConnection(APIGatewayProxyResponseEvent response, Map<String, String> queryParams) {
+		logger.log("VERIFICATION");
+		String hubMode = queryParams.get("hub.mode");
+		String hubVerifyToken = queryParams.get("hub.verify_token");
+		String hubChallenge = queryParams.get("hub.challenge");
+		if (!StringUtils.isNullOrEmpty(hubMode) && !StringUtils.isNullOrEmpty(hubVerifyToken)) {
+			if ("subscribe".equals(hubMode) && System.getenv("WEBHOOK_VERIFICATION_TOKEN").equals(hubVerifyToken)) {
+				return response
+						.withStatusCode(200)
+						.withBody(hubChallenge);
+			} else {
+				return response.withStatusCode(403);
+			}
+		}
+		return response;
+	}
+
 	private String readUsers() throws ClassNotFoundException {
-		logger.log("Trying to connect RDS Proxy");
+		logger.log("[DB] Trying to connect RDS Proxy");
+		AwsSecret dbCredentials = getDbCredentials();
+		logger.log("[DB] database credentials acquired");
 		StringBuilder sb = new StringBuilder();
 		Class.forName("com.mysql.cj.jdbc.Driver");
-		try (Connection connection = DriverManager.getConnection("jdbc:mysql://" + System.getenv("DB_URL") + ":3306/" + System.getenv("DB_NAME"), "admin", "xqa!yqg3QCG9tzk5nbj");
+		try (Connection connection = DriverManager.getConnection("jdbc:mysql://" + dbCredentials.getHost() + ":" + dbCredentials.getPort() + "/" + dbCredentials.getDatabase(), dbCredentials.getUsername(), dbCredentials.getPassword());
 		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
@@ -108,12 +109,12 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		} catch (Exception e) {
 			logger.log(e.getMessage());
 		}
-		logger.log("DB Result: " + sb);
+		logger.log("[DB] Result: " + sb);
 		return sb.toString();
 	}
 
 	private String extractMessage(String body) {
-		JsonObject jsonObject = new JsonParser().parse(body).getAsJsonObject();
+		JsonObject jsonObject = JsonParser.parseString(body).getAsJsonObject();
 		return jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
 				.getAsJsonArray("changes").get(0).getAsJsonObject()
 				.get("value").getAsJsonObject()
@@ -123,7 +124,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 	}
 
 	private String extractPhoneNumber(String body) {
-		JsonObject jsonObject = new JsonParser().parse(body).getAsJsonObject();
+		JsonObject jsonObject = JsonParser.parseString(body).getAsJsonObject();
 		return jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
 				.getAsJsonArray("changes").get(0).getAsJsonObject()
 				.get("value").getAsJsonObject()
@@ -133,23 +134,23 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
 		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
-		logger.log("Sending Whatsapp Message: " + requestBody);
+		logger.log("[WHATSAPP] Sending Message: " + requestBody);
 		String whatsappToken = getWhatsappToken();
-		logger.log("Whatsapp token acquired");
+		logger.log("[WHATSAPP] Token acquired");
 		HttpResponse<String> response = client.send(HttpRequest.newBuilder()
-				.uri(URI.create("https://graph.facebook.com/v16.0/106487262422291/messages"))
+				.uri(URI.create("https://graph.facebook.com/v16.0/" + System.getenv("WHATSAPP_PHONE_ID") + "/messages"))
 				.header("Content-Type", "application/json")
 				.header("Authorization", "Bearer " + whatsappToken)
 				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
 				.build(), HttpResponse.BodyHandlers.ofString());
-		logger.log("Whatsapp message response with status: " +response.statusCode() + " and body: " + response.body());
+		logger.log("[WHATSAPP] Message response with status: " +response.statusCode() + " and body: " + response.body());
 	}
 
 	private String askChatGpt(String message) throws IOException, InterruptedException {
 		String bodyStr = gson.toJson(new ChatGptRequest(message));
-		logger.log("Asking ChatGPT: " + bodyStr);
+		logger.log("[ChatGPT] Asking: " + bodyStr);
 		String chatGptApiKey = getChatGptApiKey();
-		logger.log("ChatGPT token acquired");
+		logger.log("[ChatGPT] Token acquired");
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("https://api.openai.com/v1/chat/completions"))
 				.header("Content-Type", "application/json")
@@ -162,19 +163,17 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		return obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
 	}
 
-	private ChatGptResponse toChatGptResponse(String json) {
-		if (json == null) {
-			return null;
-		}
-		return gson.fromJson(json, ChatGptResponse.class);
-	}
-
 	private String getWhatsappToken() {
 		return getSecret("WhatsappDev");
 	}
 
 	private String getChatGptApiKey() {
 		return getSecret("ChatGptApiKey");
+	}
+
+	private AwsSecret getDbCredentials() {
+		String secret = getSecret("xchat-db-dev-credentials");
+		return gson.fromJson(secret, AwsSecret.class);
 	}
 
 	// TODO: check performance
