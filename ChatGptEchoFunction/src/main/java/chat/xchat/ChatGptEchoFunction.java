@@ -62,7 +62,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 			String message = extractMessage(input.getBody());
 			String phone = extractPhoneNumber(input.getBody());
 			try {
-				if (phone.equals("380933506675")) {
+				if (phone.equals("380933506675") && message.equals("Read")) {
 					sendWhatsappMessage(readUsers(), phone);
 				} else {
 					String chatGptResponse = askChatGpt(message);
@@ -147,26 +147,17 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 	}
 
 	private String askChatGpt(String message) throws IOException, InterruptedException {
-		ChatGptRequest requestBody = new ChatGptRequest();
-		requestBody.setPrompt(message);
-		requestBody.setMax_tokens(100);
+		String bodyStr = gson.toJson(new ChatGptRequest(message));
 		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("https://api.openai.com/v1/completions"))
+				.uri(URI.create("https://api.openai.com/v1/chat/completions"))
 				.header("Content-Type", "application/json")
 				.header("Authorization", "Bearer " + getChatGptApiKey())
 				.header("OpenAI-Organization", "org-hjmTx18GgDpomxMwhp1Gs4rP")
-				.POST(HttpRequest.BodyPublishers.ofString(gson.toJson(requestBody)))
+				.POST(HttpRequest.BodyPublishers.ofString(bodyStr))
 				.build();
-
 		HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
-		return Optional.ofNullable(toChatGptResponse(res.body()))
-				.map(ChatGptResponse::getChoices)
-				.map(choices -> CollectionUtils.isNullOrEmpty(choices) ? null : choices.get(0))
-				.map(ChoiceDto::getText)
-				.map(String::strip)
-				.map(text -> text.replaceAll("\"", ""))
-				.map(text -> text.replaceAll("\n", ""))
-				.orElse(res.body());
+		JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
+		return obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
 	}
 
 	private ChatGptResponse toChatGptResponse(String json) {
