@@ -6,10 +6,6 @@ import java.util.List;
 
 public class ChatGptRequest {
 
-	/*
-	"{\"model\": \"text-davinci-003\", \"prompt\": \"how to play golf?\", \"temperature\": 1, \"max_tokens\": 15}"
-
-	 */
 	private String model = "gpt-3.5-turbo";
 
 	private List<ChatGptMessage> messages;

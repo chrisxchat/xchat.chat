@@ -2,14 +2,12 @@ package chat.xchat;
 
 import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.dto.ChatGptResponse;
-import chat.xchat.dto.ChoiceDto;
 import chat.xchat.response.SendWhatsappMessage;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.amazonaws.util.CollectionUtils;
 import com.amazonaws.util.StringUtils;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -29,7 +27,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Handler for requests to Lambda function.
@@ -98,7 +95,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		logger.log("Trying to connect RDS Proxy");
 		StringBuilder sb = new StringBuilder();
 		Class.forName("com.mysql.cj.jdbc.Driver");
-		try (Connection connection = DriverManager.getConnection("jdbc:mysql://xchat-db-dev.cz5wzxihuehc.us-east-1.rds.amazonaws.com:3306/xchat_dev", "admin", "xqa!yqg3QCG9tzk5nbj");
+		try (Connection connection = DriverManager.getConnection("jdbc:mysql://" + System.getenv("DB_URL") + ":3306/" + System.getenv("DB_NAME"), "admin", "xqa!yqg3QCG9tzk5nbj");
 		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
@@ -111,7 +108,7 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		} catch (Exception e) {
 			logger.log(e.getMessage());
 		}
-		logger.log("DB Result: " + sb.toString());
+		logger.log("DB Result: " + sb);
 		return sb.toString();
 	}
 
@@ -137,10 +134,12 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
 		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
 		logger.log("Sending Whatsapp Message: " + requestBody);
+		String whatsappToken = getWhatsappToken();
+		logger.log("Whatsapp token acquired");
 		HttpResponse<String> response = client.send(HttpRequest.newBuilder()
 				.uri(URI.create("https://graph.facebook.com/v16.0/106487262422291/messages"))
 				.header("Content-Type", "application/json")
-				.header("Authorization", "Bearer " + getWhatsappToken())
+				.header("Authorization", "Bearer " + whatsappToken)
 				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
 				.build(), HttpResponse.BodyHandlers.ofString());
 		logger.log("Whatsapp message response with status: " +response.statusCode() + " and body: " + response.body());
@@ -148,11 +147,14 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 	private String askChatGpt(String message) throws IOException, InterruptedException {
 		String bodyStr = gson.toJson(new ChatGptRequest(message));
+		logger.log("Asking ChatGPT: " + bodyStr);
+		String chatGptApiKey = getChatGptApiKey();
+		logger.log("ChatGPT token acquired");
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("https://api.openai.com/v1/chat/completions"))
 				.header("Content-Type", "application/json")
-				.header("Authorization", "Bearer " + getChatGptApiKey())
-				.header("OpenAI-Organization", "org-hjmTx18GgDpomxMwhp1Gs4rP")
+				.header("Authorization", "Bearer " + chatGptApiKey)
+				.header("OpenAI-Organization", System.getenv("OPENAI_ORG_ID"))
 				.POST(HttpRequest.BodyPublishers.ofString(bodyStr))
 				.build();
 		HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -173,10 +175,6 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 	private String getChatGptApiKey() {
 		return getSecret("ChatGptApiKey");
-	}
-
-	private String getTelegramBotToken() {
-		return getSecret("TelegramBotTokenDev");
 	}
 
 	// TODO: check performance
