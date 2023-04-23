@@ -10,6 +10,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.amazonaws.util.StringUtils;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import software.amazon.awssdk.regions.Region;
@@ -27,6 +28,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 
 public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -46,9 +48,9 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent()
 				.withHeaders(headers);
+		this.logger = context.getLogger();
 
 		Map<String, String> queryParams = input.getQueryStringParameters();
-		this.logger = context.getLogger();
 		logger.log("Request body: " + input.getBody());
 		if (queryParams == null || queryParams.isEmpty()) {
 			return handleUserRequest(input, response);
@@ -58,13 +60,17 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 
 	private APIGatewayProxyResponseEvent handleUserRequest(APIGatewayProxyRequestEvent input, APIGatewayProxyResponseEvent response) {
 		String message = extractMessage(input.getBody());
+		if (message == null) {
+			return response.withStatusCode(200);
+		}
 		String phone = extractPhoneNumber(input.getBody());
 		try {
 			if (phone.equals("380933506675") && message.equals("Read")) {
 				sendWhatsappMessage(readUsers(), phone);
 			} else {
+				String greetingMessage = greetNewUser(phone, extractUserName(input.getBody()));
 				String chatGptResponse = askChatGpt(message);
-				sendWhatsappMessage(chatGptResponse, phone);
+				sendWhatsappMessage(greetingMessage + chatGptResponse, phone);
 			}
 		} catch (Exception e) {
 			logger.log(e.getMessage());
@@ -90,21 +96,49 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		return response;
 	}
 
+	private String greetNewUser(String phone, String userName) throws ClassNotFoundException {
+		logger.log("[DB] Connecting");
+		AwsSecret dbCredentials = getDbCredentials();
+		logger.log("[DB] database credentials acquired");
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), dbCredentials.getUsername(), dbCredentials.getPassword());
+		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data WHERE phone_number = ?")) {
+			ps.setString(1, phone);
+			ResultSet rs = ps.executeQuery();
+			if (rs.next()) {
+				return "";
+			}
+			logger.log("[DB] User " + phone + " not found, creating");
+			PreparedStatement createUser = connection.prepareStatement("INSERT INTO users_data (phone_number, name) VALUES (?, ?)");
+			createUser.setString(1, phone);
+			createUser.setString(2, userName);
+			createUser.executeUpdate();
+			logger.log("[DB] User saved in database");
+			return "Welcome to xChat!\nThis is the first iteration of a new product that brings AI into your chat experience.   Over time, we'll improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.\n\n";
+		} catch (Exception e) {
+			logger.log(e.getMessage());
+			return "";
+		}
+	}
+
+	private String jdbcUrl(AwsSecret dbCredentials) {
+		return "jdbc:mysql://" + dbCredentials.getHost() + ":" + dbCredentials.getPort() + "/" + dbCredentials.getDatabase();
+	}
+
 	private String readUsers() throws ClassNotFoundException {
 		logger.log("[DB] Trying to connect RDS Proxy");
 		AwsSecret dbCredentials = getDbCredentials();
 		logger.log("[DB] database credentials acquired");
 		StringBuilder sb = new StringBuilder();
 		Class.forName("com.mysql.cj.jdbc.Driver");
-		try (Connection connection = DriverManager.getConnection("jdbc:mysql://" + dbCredentials.getHost() + ":" + dbCredentials.getPort() + "/" + dbCredentials.getDatabase(), dbCredentials.getUsername(), dbCredentials.getPassword());
+		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), dbCredentials.getUsername(), dbCredentials.getPassword());
 		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
 				Long id = rs.getLong("id");
 				String phone = rs.getString("phone_number");
 				String name = rs.getString("name");
-				int visits = rs.getInt("visits");
-				sb.append(String.format("%s, %s, %s, %s\n", id, name, phone, visits));
+				sb.append(String.format("%s, %s, %s\n", id, name, phone));
 			}
 		} catch (Exception e) {
 			logger.log(e.getMessage());
@@ -113,14 +147,29 @@ public class ChatGptEchoFunction implements RequestHandler<APIGatewayProxyReques
 		return sb.toString();
 	}
 
-	private String extractMessage(String body) {
+	private String extractUserName(String body) {
 		JsonObject jsonObject = JsonParser.parseString(body).getAsJsonObject();
 		return jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
 				.getAsJsonArray("changes").get(0).getAsJsonObject()
 				.get("value").getAsJsonObject()
-				.getAsJsonArray("messages").get(0).getAsJsonObject()
-				.get("text").getAsJsonObject()
-				.get("body").getAsString();
+				.getAsJsonArray("contacts").get(0).getAsJsonObject()
+				.get("profile").getAsJsonObject()
+				.get("name").getAsString();
+	}
+
+	private String extractMessage(String body) {
+		JsonObject jsonObject = JsonParser.parseString(body).getAsJsonObject();
+		return Optional.ofNullable(jsonObject.getAsJsonArray("entry").get(0).getAsJsonObject()
+				.getAsJsonArray("changes").get(0).getAsJsonObject()
+				.get("value").getAsJsonObject())
+				.map(it -> it.getAsJsonArray("messages"))
+				.map(it -> it.get(0))
+				.map(JsonElement::getAsJsonObject)
+				.map(it -> it.get("text"))
+				.map(JsonElement::getAsJsonObject)
+				.map(it -> it.get("body"))
+				.map(JsonElement::getAsString)
+				.orElse(null);
 	}
 
 	private String extractPhoneNumber(String body) {
