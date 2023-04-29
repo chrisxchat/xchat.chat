@@ -1,5 +1,6 @@
 package chat.xchat;
 
+import chat.xchat.dto.AwsSecret;
 import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.response.SendWhatsappMessage;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -18,6 +19,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Map;
 
 
@@ -33,6 +38,7 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 
 	private final String whatsappToken = getSecret("WhatsappDev");
 	private final String chatGptApiKey = getSecret("ChatGptApiKey");
+	private final AwsSecret dbCredentials = gson.fromJson(getSecret("xchat-db-dev-credentials"), AwsSecret.class);
 
 	public APIGatewayProxyResponseEvent handleRequest(final Map<String, String> request, final Context context) {
 		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
@@ -49,9 +55,9 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 		String phone = request.get("phone");
 		try {
 			if (phone.equals("380933506675") && message.equals("Read")) {
-				sendWhatsappMessage("DB read mock", phone);
+				sendWhatsappMessage(readUsers(), phone);
 			} else {
-				String greetingMessage = "";//greetNewUser(phone, request.get("username"));
+				String greetingMessage = greetNewUser(phone, request.get("username"));
 				String chatGptResponse = askChatGpt(message);
 				sendWhatsappMessage(greetingMessage + chatGptResponse, phone);
 			}
@@ -62,56 +68,55 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 		return response.withStatusCode(200);
 	}
 
-//	private String greetNewUser(String phone, String userName) throws ClassNotFoundException {
-//		logger.log("[DB] Connecting");
-//		AwsSecret dbCredentials = getDbCredentials();
-//		logger.log("[DB] database credentials acquired");
-//		Class.forName("com.mysql.cj.jdbc.Driver");
-//		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), dbCredentials.getUsername(), dbCredentials.getPassword());
-//		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data WHERE phone_number = ?")) {
-//			ps.setString(1, phone);
-//			ResultSet rs = ps.executeQuery();
-//			if (rs.next()) {
-//				return "";
-//			}
-//			logger.log("[DB] User " + phone + " not found, creating");
-//			PreparedStatement createUser = connection.prepareStatement("INSERT INTO users_data (phone_number, name) VALUES (?, ?)");
-//			createUser.setString(1, phone);
-//			createUser.setString(2, userName);
-//			createUser.executeUpdate();
-//			logger.log("[DB] User saved in database");
-//			return "Welcome to xChat!\nThis is the first iteration of a new product that brings AI into your chat experience.   Over time, we'll improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.\n\n";
-//		} catch (Exception e) {
-//			logger.log(e.getMessage());
-//			return "";
-//		}
-//	}
-//
-//	private String jdbcUrl(AwsSecret dbCredentials) {
-//		return "jdbc:mysql://" + dbCredentials.getHost() + ":" + dbCredentials.getPort() + "/" + dbCredentials.getDatabase();
-//	}
-//
-//	private String readUsers() throws ClassNotFoundException {
-//		logger.log("[DB] Trying to connect RDS Proxy");
-//		AwsSecret dbCredentials = getDbCredentials();
-//		logger.log("[DB] database credentials acquired");
-//		StringBuilder sb = new StringBuilder();
-//		Class.forName("com.mysql.cj.jdbc.Driver");
-//		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), dbCredentials.getUsername(), dbCredentials.getPassword());
-//		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
-//			ResultSet rs = ps.executeQuery();
-//			while (rs.next()) {
-//				Long id = rs.getLong("id");
-//				String phone = rs.getString("phone_number");
-//				String name = rs.getString("name");
-//				sb.append(String.format("%s, %s, %s\n", id, name, phone));
-//			}
-//		} catch (Exception e) {
-//			logger.log(e.getMessage());
-//		}
-//		logger.log("[DB] Result: " + sb);
-//		return sb.toString();
-//	}
+	private String greetNewUser(String phone, String userName) throws ClassNotFoundException {
+		logger.log("[DB] Connecting");
+		logger.log("[DB] database credentials acquired");
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), this.dbCredentials.getUsername(), this.dbCredentials.getPassword());
+		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data WHERE phone_number = ?")) {
+			ps.setString(1, phone);
+			ResultSet rs = ps.executeQuery();
+			if (rs.next()) {
+				return "";
+			}
+			logger.log("[DB] User " + phone + " not found, creating");
+			PreparedStatement createUser = connection.prepareStatement("INSERT INTO users_data (phone_number, name) VALUES (?, ?)");
+			createUser.setString(1, phone);
+			createUser.setString(2, userName);
+			createUser.executeUpdate();
+			logger.log("[DB] User saved in database");
+			return "Welcome to xChat!\nThis is the first iteration of a new product that brings AI into your chat experience.   Over time, we'll improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.\n\n";
+		} catch (Exception e) {
+			logger.log(e.getMessage());
+			return "";
+		}
+	}
+
+	private String jdbcUrl(AwsSecret dbCredentials) {
+		return "jdbc:mysql://" + dbCredentials.getHost() + ":" + dbCredentials.getPort() + "/" + dbCredentials.getDatabase();
+	}
+
+	private String readUsers() throws ClassNotFoundException {
+		logger.log("[DB] Trying to connect RDS Proxy");
+		AwsSecret dbCredentials = this.dbCredentials;
+		logger.log("[DB] database credentials acquired");
+		StringBuilder sb = new StringBuilder();
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		try (Connection connection = DriverManager.getConnection(jdbcUrl(dbCredentials), dbCredentials.getUsername(), dbCredentials.getPassword());
+		     PreparedStatement ps = connection.prepareStatement("SELECT * FROM users_data")) {
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				Long id = rs.getLong("id");
+				String phone = rs.getString("phone_number");
+				String name = rs.getString("name");
+				sb.append(String.format("%s, %s, %s\n", id, name, phone));
+			}
+		} catch (Exception e) {
+			logger.log(e.getMessage());
+		}
+		logger.log("[DB] Result: " + sb);
+		return sb.toString();
+	}
 
 	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
 		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
@@ -140,11 +145,6 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 		JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
 		return obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
 	}
-
-//	private AwsSecret getDbCredentials() {
-//		String secret = getSecret("xchat-db-dev-credentials");
-//		return gson.fromJson(secret, AwsSecret.class);
-//	}
 
 	private String getSecret(String name) {
 		return secretsManagerClient.getSecretValue(GetSecretValueRequest.builder()
