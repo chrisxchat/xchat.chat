@@ -2,8 +2,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>chat.xchat</groupId>
-  <artifactId>xChat</artifactId>
-  <name>xChat</name>
+  <artifactId>ChatGptEchoFunction</artifactId>
+  <name>xChat Echo Function</name>
   <version>1.0</version>
   <build>
     <plugins>
@@ -23,6 +23,12 @@
     </plugins>
   </build>
   <dependencies>
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+      <version>8.0.33</version>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
