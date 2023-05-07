@@ -35,6 +35,24 @@ Resources:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
           WEBHOOK_VERIFICATION_TOKEN: VERIFY_TOKEN
+  TwilioWhatsAppEchoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: TwilioWhatsAppEchoFunction
+      Handler: chat.xchat.TwilioWhatsAppEchoFunction::handleRequest
+      Runtime: java11
+      Architectures:
+        - x86_64
+      MemorySize: 512
+  UserRegistrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: UserRegistrationFunction
+      Handler: chat.xchat.UserRegistrationFunction::handleRequest
+      Runtime: java11
+      Architectures:
+        - x86_64
+      MemorySize: 512
 
 Outputs:
   ChatGptEchoFunction:
