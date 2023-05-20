@@ -19,7 +19,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 
 	private final String tableName = System.getenv("DYNAMODB_TABLE_NAME");
 
-	private AmazonDynamoDB amazonDynamoDB = AmazonDynamoDBClientBuilder.standard()
+	private final AmazonDynamoDB amazonDynamoDB = AmazonDynamoDBClientBuilder.standard()
 			.withRegion(Regions.US_EAST_1)
 			.build();
 
