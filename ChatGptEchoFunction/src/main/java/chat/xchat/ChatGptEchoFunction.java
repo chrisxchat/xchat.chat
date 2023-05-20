@@ -43,10 +43,15 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 
 	private APIGatewayProxyResponseEvent handleUserRequest(Map<String, String> request, APIGatewayProxyResponseEvent response) {
 		String message = request.get("message");
-		if (message == null) {
+		if (message == null || message.isBlank()) {
+			this.logger.log("Received empty message");
 			return response.withStatusCode(200);
 		}
 		String phone = request.get("phone");
+		if (phone == null || phone.isBlank()) {
+			this.logger.log("Received empty phone");
+			return response.withStatusCode(200);
+		}
 		try {
 			String chatGptResponse = askChatGpt(message);
 			sendWhatsappMessage(chatGptResponse, phone);
@@ -60,7 +65,6 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
 		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
 		logger.log("[WHATSAPP] Sending Message: " + requestBody);
-		logger.log("[WHATSAPP] Token acquired");
 		HttpResponse<String> response = client.send(HttpRequest.newBuilder()
 				.uri(URI.create("https://graph.facebook.com/v16.0/" + System.getenv("WHATSAPP_PHONE_ID") + "/messages"))
 				.header("Content-Type", "application/json")
