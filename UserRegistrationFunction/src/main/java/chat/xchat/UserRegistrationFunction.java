@@ -52,6 +52,8 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 	private final String greetingMessage = "Welcome to xChat!\n" +
 			"\nThis is the first iteration of a new product that brings AI into your chat experience. Over time, we will improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.";
 
+	private final String DEVELOPER_NUMBER = "***";
+
 	@Override
 	public APIGatewayProxyResponseEvent handleRequest(Map<String, String> request, Context context) {
 		this.logger = context.getLogger();
@@ -59,22 +61,21 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 		if (!validateInputDataAndCredentials(phone)) {
 			return new APIGatewayProxyResponseEvent().withStatusCode(200);
 		}
-
+		// TODO delete later
+		if (phone.contains(DEVELOPER_NUMBER)) {
+			phone = "38" + DEVELOPER_NUMBER;
+		} else if (!phone.startsWith("1")) {
+			phone = "1" + phone;
+		}
 		try {
-			GetItemRequest getUserRequest = new GetItemRequest(this.tableName, Map.of("phone", new AttributeValue(phone)));
-			Map<String, AttributeValue> user = this.amazonDynamoDB.getItem(getUserRequest).getItem();
-			if (user == null) {
-				Map<String, AttributeValue> attributesMap = new HashMap<>();
-				attributesMap.put("phone", new AttributeValue(phone));
-				attributesMap.put("username", new AttributeValue(request.get("username")));
-				this.amazonDynamoDB.putItem(this.tableName, attributesMap);
-				// send greeting messages
-				sendSms(phone, this.greetingMessage);
-				sendWhatsappMessage(phone, this.greetingMessage);
-				return new APIGatewayProxyResponseEvent().withBody("User registered").withStatusCode(200);
-			} else {
-				return new APIGatewayProxyResponseEvent().withBody("User " + phone + " already registered").withStatusCode(200);
-			}
+			Map<String, AttributeValue> attributesMap = new HashMap<>();
+			attributesMap.put("phone", new AttributeValue(phone));
+			attributesMap.put("username", new AttributeValue(request.get("username")));
+			this.amazonDynamoDB.putItem(this.tableName, attributesMap);
+			// send greeting messages
+			sendSms(phone, this.greetingMessage);
+			sendWhatsappMessage(phone, this.greetingMessage);
+			return new APIGatewayProxyResponseEvent().withBody("User " + phone + " registered").withStatusCode(200);
 		} catch (Exception e) {
 			this.logger.log("ERROR: " + e.getMessage());
 			return new APIGatewayProxyResponseEvent().withBody("Error").withStatusCode(200);
