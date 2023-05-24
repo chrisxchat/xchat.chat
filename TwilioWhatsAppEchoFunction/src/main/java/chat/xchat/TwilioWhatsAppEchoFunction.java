@@ -101,12 +101,13 @@ public class TwilioWhatsAppEchoFunction implements RequestHandler<APIGatewayProx
 		HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
 		JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
 		String aiResponse = obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString().replaceAll("\\n", "").strip();
-		String response = aiResponse.substring(0, Math.min(160, aiResponse.length()));
+		String response = aiResponse.substring(0, Math.min(640, aiResponse.length()));
 		this.logger.log("[ChatGPT] response: " + response);
 		return response;
 	}
 
 	private SmsRequest extractMessage(String encodedBody) {
+		this.logger.log("Received SMS body: " + encodedBody);
 		byte[] decodedBytes = Base64.getDecoder().decode(encodedBody);
 		String decodedString = new String(decodedBytes);
 		String body = decodedString.split("&Body=")[1].split("&")[0];
@@ -128,7 +129,7 @@ public class TwilioWhatsAppEchoFunction implements RequestHandler<APIGatewayProx
 
 	private boolean validateInputDataAndCredentials(SmsRequest sms) {
 		if (sms.isEmpty()) {
-			this.logger.log("Empty SMS message received");
+			this.logger.log("[ERROR] Empty SMS message received");
 			return false;
 		}
 		if (this.chatGptApiKey == null || this.chatGptApiKey.isBlank()) {

@@ -54,7 +54,7 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 		}
 		try {
 			String chatGptResponse = askChatGpt(message);
-			sendWhatsappMessage(chatGptResponse, phone);
+			sendWhatsappMessage(phone, chatGptResponse);
 		} catch (Exception e) {
 			logger.log(e.getMessage());
 			return response.withStatusCode(500);
@@ -62,7 +62,7 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 		return response.withStatusCode(200);
 	}
 
-	private void sendWhatsappMessage(String message, String phone) throws IOException, InterruptedException {
+	private void sendWhatsappMessage(String phone, String message) throws IOException, InterruptedException {
 		String requestBody = gson.toJson(new SendWhatsappMessage(phone, message));
 		logger.log("[WHATSAPP] Sending Message: " + requestBody);
 		HttpResponse<String> response = client.send(HttpRequest.newBuilder()
