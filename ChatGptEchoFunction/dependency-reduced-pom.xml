@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>chat.xchat</groupId>
   <artifactId>ChatGptEchoFunction</artifactId>
-  <name>xChat Echo Function</name>
+  <name>ChatGptEchoFunction</name>
   <version>1.0</version>
   <build>
     <plugins>

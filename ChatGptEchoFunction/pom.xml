@@ -5,7 +5,7 @@
     <artifactId>ChatGptEchoFunction</artifactId>
     <version>1.0</version>
     <packaging>jar</packaging>
-    <name>xChat Echo Function</name>
+    <name>ChatGptEchoFunction</name>
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
