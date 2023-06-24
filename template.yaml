@@ -36,11 +36,11 @@ Resources:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
           WEBHOOK_VERIFICATION_TOKEN: VERIFY_TOKEN
-  TwilioWhatsAppEchoFunction:
+  TwilioSmsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: TwilioWhatsAppEchoFunction
-      Handler: chat.xchat.TwilioWhatsAppEchoFunction::handleRequest
+      CodeUri: TwilioSmsFunction
+      Handler: chat.xchat.TwilioSmsFunction::handleRequest
       Runtime: java11
       Architectures:
         - x86_64

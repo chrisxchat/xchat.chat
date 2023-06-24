@@ -28,7 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-public class TwilioWhatsAppEchoFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
+public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
 	private LambdaLogger logger;
 
