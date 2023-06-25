@@ -1,14 +1,12 @@
 package chat.xchat;
 
-import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.response.SendWhatsappMessage;
+import chat.xchat.service.ChatGptService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
@@ -27,16 +25,18 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 	private final Gson gson = new Gson();
 	private LambdaLogger logger;
 
+	private ChatGptService chatGptService;
+
 	private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
 			.region(Region.of("us-east-1"))
 			.build();
 
 	private final String whatsappToken = getSecret("WhatsappDev");
-	private final String chatGptApiKey = getSecret("ChatGptApiKey");
 
 	public APIGatewayProxyResponseEvent handleRequest(final Map<String, String> request, final Context context) {
 		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
 		this.logger = context.getLogger();
+		this.chatGptService = new ChatGptService(this.logger);
 		logger.log("[INPUT] " + gson.toJson(request));
 		return handleUserRequest(request, response);
 	}
@@ -53,7 +53,7 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 			return response.withStatusCode(200);
 		}
 		try {
-			String chatGptResponse = askChatGpt(message);
+			String chatGptResponse = this.chatGptService.askChatGpt(message);
 			sendWhatsappMessage(phone, chatGptResponse);
 		} catch (Exception e) {
 			logger.log(e.getMessage());
@@ -72,21 +72,6 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
 				.build(), HttpResponse.BodyHandlers.ofString());
 		logger.log("[WHATSAPP] Message response with status: " +response.statusCode() + " and body: " + response.body());
-	}
-
-	private String askChatGpt(String message) throws IOException, InterruptedException {
-		String bodyStr = gson.toJson(new ChatGptRequest(message));
-		logger.log("[ChatGPT] Asking: " + bodyStr);
-		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("https://api.openai.com/v1/chat/completions"))
-				.header("Content-Type", "application/json")
-				.header("Authorization", "Bearer " + this.chatGptApiKey)
-				.header("OpenAI-Organization", System.getenv("OPENAI_ORG_ID"))
-				.POST(HttpRequest.BodyPublishers.ofString(bodyStr))
-				.build();
-		HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
-		JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
-		return obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
 	}
 
 	private String getSecret(String name) {
