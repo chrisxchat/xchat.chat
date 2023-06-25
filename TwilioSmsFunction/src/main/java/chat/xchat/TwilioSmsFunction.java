@@ -1,17 +1,15 @@
 package chat.xchat;
 
 
-import chat.xchat.dto.ChatGptRequest;
 import chat.xchat.dto.SmsRequest;
 import chat.xchat.dto.TwilioCredentials;
+import chat.xchat.service.ChatGptService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
@@ -19,12 +17,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 
-import java.io.IOException;
-import java.net.URI;
 import java.net.URLDecoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
@@ -32,7 +25,6 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 
 	private LambdaLogger logger;
 
-	private final HttpClient client = HttpClient.newHttpClient();
 	private final Gson gson = new Gson();
 
 	private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
@@ -41,11 +33,12 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 
 	private final TwilioCredentials twilioCredentials = gson.fromJson(getSecret("TwilioCredentials"), TwilioCredentials.class);
 
-	private final String chatGptApiKey = getSecret("ChatGptApiKey");
+	private ChatGptService chatGptService;
 
 	@Override
 	public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent req, Context context) {
 		this.logger = context.getLogger();
+		this.chatGptService = new ChatGptService(this.logger);
 
 		SmsRequest sms = extractMessage(req.getBody());
 
@@ -55,7 +48,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 
 		String chatGptResponse = null;
 		try {
-			chatGptResponse = askChatGpt(sms.getBody());
+			chatGptResponse = this.chatGptService.askChatGpt(sms.getBody());
 			if (chatGptResponse.isBlank()) {
 				throw new RuntimeException("ChatGPT response is blank");
 			}
@@ -88,24 +81,6 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 		this.logger.log("Message SID " + message.getSid());
 	}
 
-	private String askChatGpt(String message) throws IOException, InterruptedException {
-		String bodyStr = this.gson.toJson(new ChatGptRequest(message));
-		this.logger.log("[ChatGPT] Asking: " + bodyStr);
-		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("https://api.openai.com/v1/chat/completions"))
-				.header("Content-Type", "application/json")
-				.header("Authorization", "Bearer " + this.chatGptApiKey)
-				.header("OpenAI-Organization", System.getenv("OPENAI_ORG_ID"))
-				.POST(HttpRequest.BodyPublishers.ofString(bodyStr))
-				.build();
-		HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
-		JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
-		String aiResponse = obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString().replaceAll("\\n", "").strip();
-		String response = aiResponse.substring(0, Math.min(640, aiResponse.length()));
-		this.logger.log("[ChatGPT] response: " + response);
-		return response;
-	}
-
 	private SmsRequest extractMessage(String encodedBody) {
 		this.logger.log("Received SMS body: " + encodedBody);
 		byte[] decodedBytes = Base64.getDecoder().decode(encodedBody);
@@ -130,15 +105,6 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 	private boolean validateInputDataAndCredentials(SmsRequest sms) {
 		if (sms.isEmpty()) {
 			this.logger.log("[ERROR] Empty SMS message received");
-			return false;
-		}
-		if (this.chatGptApiKey == null || this.chatGptApiKey.isBlank()) {
-			this.logger.log("[ERROR] Can not get ChatGPT API key");
-			return false;
-		}
-		String openaiOrgId = System.getenv("OPENAI_ORG_ID");
-		if (openaiOrgId == null || openaiOrgId.isBlank()) {
-			this.logger.log("[ERROR] Can not get OPENAI_ORG_ID");
 			return false;
 		}
 		if (twilioCredentials == null) {

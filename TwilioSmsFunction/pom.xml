@@ -40,6 +40,12 @@
             <artifactId>twilio</artifactId>
             <version>9.6.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>chat.xchat</groupId>
+            <artifactId>xchat-core</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
 </project>
