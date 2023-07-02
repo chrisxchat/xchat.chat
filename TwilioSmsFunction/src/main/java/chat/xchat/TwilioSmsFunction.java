@@ -48,7 +48,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 
 		String chatGptResponse = null;
 		try {
-			chatGptResponse = this.chatGptService.askChatGpt(sms.getBody());
+			chatGptResponse = this.chatGptService.askChatGpt(sms.getBody(), null);
 			if (chatGptResponse.isBlank()) {
 				throw new RuntimeException("ChatGPT response is blank");
 			}

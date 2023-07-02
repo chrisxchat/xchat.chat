@@ -1,5 +1,6 @@
 package chat.xchat;
 
+import chat.xchat.dto.LoopGroup;
 import chat.xchat.dto.LoopMessageDto;
 import chat.xchat.dto.LoopMessageKeys;
 import chat.xchat.dto.LoopMessageRequest;
@@ -18,6 +19,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Optional;
 
 public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
@@ -27,6 +29,7 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
     private final HttpClient client = HttpClient.newHttpClient();
 
     private static final String LOOP_MESSAGE_API = "https://server.loopmessage.com/api/v1/message/send/";
+    private static final Integer MESSAGE_MAX_SYMBOLS = 10_000;
 
     private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
             .region(Region.of("us-east-1"))
@@ -54,8 +57,15 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
             if (phoneNumber.startsWith("\\+")) {
                 phoneNumber = phoneNumber.replaceAll("\\+", "");
             }
-            String chatGptResponse = this.chatGptService.askChatGpt(incomingRequest.getText());
-            String bodyStr = this.gson.toJson(new LoopMessageRequest(phoneNumber, chatGptResponse, System.getenv("SENDER_NAME")));
+            String senderName = incomingRequest.getSender_name();
+            String chatGptResponse = this.chatGptService.askChatGpt(incomingRequest.getText(), MESSAGE_MAX_SYMBOLS);
+            boolean isGroupChat = incomingRequest.getGroup() != null;
+            String bodyStr = this.gson.toJson(new LoopMessageRequest(
+                    isGroupChat ? null : phoneNumber,
+                    chatGptResponse,
+                    senderName,
+                    isGroupChat ? Optional.ofNullable(incomingRequest.getGroup()).map(LoopGroup::getGroup_id).orElse(null) : null
+            ));
             this.logger.log("RESPONSE message: " + bodyStr);
             HttpRequest loopMessageRequest = HttpRequest.newBuilder()
                     .uri(URI.create(LOOP_MESSAGE_API))
@@ -79,11 +89,6 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
         }
         if (this.loopMessageKeys.getSecretAPIKey() == null || this.loopMessageKeys.getSecretAPIKey().isEmpty()) {
             this.logger.log("[ERROR] Empty Loop Secret Key");
-            return false;
-        }
-        String senderName = System.getenv("SENDER_NAME");
-        if (senderName == null || senderName.isEmpty()) {
-            this.logger.log("[ERROR] Empty SENDER_NAME");
             return false;
         }
         return true;

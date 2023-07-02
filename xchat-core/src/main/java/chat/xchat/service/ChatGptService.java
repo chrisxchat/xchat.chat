@@ -26,7 +26,7 @@ public class ChatGptService {
         this.logger = logger;
     }
 
-    public String askChatGpt(String message) throws IOException, InterruptedException {
+    public String askChatGpt(String message, Integer responseLimit) throws IOException, InterruptedException {
         validateCredentials();
         String bodyStr = gson.toJson(new ChatGptRequest(message));
         logger.log("[ChatGPT] Asking: " + bodyStr);
@@ -39,7 +39,11 @@ public class ChatGptService {
                 .build();
         HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
         JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
-        return obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
+        String response = obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
+        if (responseLimit == null) {
+            return response;
+        }
+        return response.length() > responseLimit ? response.substring(0, responseLimit) : response;
     }
 
     private void validateCredentials() {

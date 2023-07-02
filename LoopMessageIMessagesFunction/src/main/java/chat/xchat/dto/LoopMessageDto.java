@@ -8,6 +8,8 @@ public class LoopMessageDto {
     private String message_id;
     private String webhook_id;
     private String api_version;
+    private String sender_name;
+    private LoopGroup group;
 
     public String getAlert_type() {
         return alert_type;
@@ -63,5 +65,21 @@ public class LoopMessageDto {
 
     public void setApi_version(String api_version) {
         this.api_version = api_version;
+    }
+
+    public String getSender_name() {
+        return sender_name;
+    }
+
+    public void setSender_name(String sender_name) {
+        this.sender_name = sender_name;
+    }
+
+    public LoopGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(LoopGroup group) {
+        this.group = group;
     }
 }

@@ -53,7 +53,7 @@ public class ChatGptEchoFunction implements RequestHandler<Map<String, String>, 
 			return response.withStatusCode(200);
 		}
 		try {
-			String chatGptResponse = this.chatGptService.askChatGpt(message);
+			String chatGptResponse = this.chatGptService.askChatGpt(message, null);
 			sendWhatsappMessage(phone, chatGptResponse);
 		} catch (Exception e) {
 			logger.log(e.getMessage());
