@@ -3,11 +3,7 @@ package chat.xchat;
 
 import chat.xchat.dto.SendWhatsappMessage;
 import chat.xchat.dto.TwilioCredentials;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.GetItemRequest;
+import chat.xchat.service.UsersService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -25,7 +21,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.HashMap;
 import java.util.Map;
 
 public class UserRegistrationFunction implements RequestHandler<Map<String, String>, APIGatewayProxyResponseEvent> {
@@ -34,12 +29,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 	private final Gson gson = new Gson();
 	private final HttpClient client = HttpClient.newHttpClient();
 
-	private final String tableName = System.getenv("DYNAMODB_TABLE_NAME");
 	private final String whatsAppPhoneId = System.getenv("WHATSAPP_PHONE_ID");
-
-	private final AmazonDynamoDB amazonDynamoDB = AmazonDynamoDBClientBuilder.standard()
-			.withRegion(Regions.US_EAST_1)
-			.build();
 
 	private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
 			.region(Region.of("us-east-1"))
@@ -49,6 +39,8 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 
 	private final String whatsappToken = getSecret("WhatsappDev");
 
+	private UsersService usersService;
+
 	private final String greetingMessage = "Welcome to xChat!\n" +
 			"\nThis is the first iteration of a new product that brings AI into your chat experience. Over time, we will improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.";
 
@@ -57,6 +49,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 	@Override
 	public APIGatewayProxyResponseEvent handleRequest(Map<String, String> request, Context context) {
 		this.logger = context.getLogger();
+		this.usersService = new UsersService(this.logger);
 		String phone = request.get("phone");
 		if (!validateInputDataAndCredentials(phone)) {
 			return new APIGatewayProxyResponseEvent().withStatusCode(200);
@@ -68,10 +61,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 			phone = "1" + phone;
 		}
 		try {
-			Map<String, AttributeValue> attributesMap = new HashMap<>();
-			attributesMap.put("phone", new AttributeValue(phone));
-			attributesMap.put("username", new AttributeValue(request.get("username")));
-			this.amazonDynamoDB.putItem(this.tableName, attributesMap);
+			this.usersService.save(request.get("username"), phone, request.get("email"));
 			// send greeting messages
 			sendSms(phone, this.greetingMessage);
 			sendWhatsappMessage(phone, this.greetingMessage);
@@ -111,10 +101,6 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 	}
 
 	private boolean validateInputDataAndCredentials(String phone) {
-		if (this.tableName == null || this.tableName.isBlank()) {
-			this.logger.log("[ERROR] DynamoDB table name not found");
-			return false;
-		}
 		if (this.whatsappToken == null || this.whatsappToken.isBlank()) {
 			this.logger.log("[ERROR] WhatsApp token not found");
 			return false;

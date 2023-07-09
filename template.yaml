@@ -6,6 +6,10 @@ Globals:
   Function:
     Timeout: 10
     MemorySize: 128
+    Environment:
+      Variables:
+        DYNAMO_USERS_TABLE: users_data
+        DYNAMO_UNANSWERED_QUESTIONS_TABLE: unanswered_questions
 
 Resources:
   ChatGptEchoFunction:
@@ -22,7 +26,6 @@ Resources:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
           OPENAI_ORG_ID: org-hjmTx18GgDpomxMwhp1Gs4rP
           WHATSAPP_PHONE_ID: 106487262422291
-          DYNAMODB_TABLE_NAME: users_data
   WhatsappWebhookVerificationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -61,7 +64,6 @@ Resources:
       Environment:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
-          DYNAMODB_TABLE_NAME: users_data
           WHATSAPP_PHONE_ID: 106487262422291
   LoopMessageIMessagesFunction:
     Type: AWS::Serverless::Function
@@ -75,7 +77,6 @@ Resources:
       Environment:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
-          DYNAMODB_TABLE_NAME: users_data
 
 Outputs:
   ChatGptEchoFunction:
