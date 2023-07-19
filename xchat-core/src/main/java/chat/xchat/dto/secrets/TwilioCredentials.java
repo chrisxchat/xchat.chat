@@ -1,4 +1,4 @@
-package chat.xchat.dto;
+package chat.xchat.dto.secrets;
 
 
 public class TwilioCredentials {

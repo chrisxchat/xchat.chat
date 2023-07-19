@@ -5,7 +5,7 @@ import chat.xchat.dto.LoopMessageDto;
 import chat.xchat.dto.LoopMessageRequest;
 import chat.xchat.enums.Channel;
 import chat.xchat.service.ChatGptService;
-import chat.xchat.service.IMessageService;
+import chat.xchat.service.impl.IMessageService;
 import chat.xchat.service.QuestionService;
 import chat.xchat.service.UsersService;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -38,9 +38,6 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
         this.chatGptService = new ChatGptService(this.logger);
         this.usersService = new UsersService(this.logger);
         this.iMessageService = new IMessageService(this.logger);
-        if (!this.iMessageService.validate()) {
-            return new APIGatewayProxyResponseEvent().withStatusCode(500);
-        }
         try {
             LoopMessageDto incomingRequest = this.gson.fromJson(requestEvent.getBody(), LoopMessageDto.class);
             if (!"message_inbound".equals(incomingRequest.getAlert_type())) {

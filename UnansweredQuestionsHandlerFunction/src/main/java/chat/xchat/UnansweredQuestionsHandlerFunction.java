@@ -4,7 +4,7 @@ import chat.xchat.dto.UnansweredQuestion;
 import chat.xchat.enums.Channel;
 import chat.xchat.service.ChatGptService;
 import chat.xchat.service.CommunicationService;
-import chat.xchat.service.IMessageService;
+import chat.xchat.service.impl.IMessageService;
 import chat.xchat.service.QuestionService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
