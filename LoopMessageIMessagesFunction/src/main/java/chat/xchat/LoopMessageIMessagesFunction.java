@@ -2,10 +2,10 @@ package chat.xchat;
 
 import chat.xchat.dto.LoopGroup;
 import chat.xchat.dto.LoopMessageDto;
-import chat.xchat.dto.LoopMessageKeys;
 import chat.xchat.dto.LoopMessageRequest;
 import chat.xchat.enums.Channel;
 import chat.xchat.service.ChatGptService;
+import chat.xchat.service.IMessageService;
 import chat.xchat.service.QuestionService;
 import chat.xchat.service.UsersService;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -14,15 +14,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.google.gson.Gson;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
-import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Optional;
 
 public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -30,35 +22,25 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
     private LambdaLogger logger;
     private final Gson gson = new Gson();
 
-    private final HttpClient client = HttpClient.newHttpClient();
-
-    private static final String LOOP_MESSAGE_API = "https://server.loopmessage.com/api/v1/message/send/";
     private static final Integer MESSAGE_MAX_SYMBOLS = 10_000;
 
     private static final String PLEASE_REGISTER_MESSAGE = "Hi, I see that you’re not yet registered with xChat. Register at https://xchat.chat for free and I’ll then be able to answer your question.";
 
-    private final SecretsManagerClient secretsManagerClient = SecretsManagerClient.builder()
-            .region(Region.of("us-east-1"))
-            .build();
-
-    private final LoopMessageKeys loopMessageKeys = gson.fromJson(getSecret("LoopMessageKeys"), LoopMessageKeys.class);
-
     private ChatGptService chatGptService;
     private UsersService usersService;
     private QuestionService questionService;
+    private IMessageService iMessageService;
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent requestEvent, Context context) {
         this.logger = context.getLogger();
         this.logger.log("REQUEST: " + requestEvent.getBody());
         this.chatGptService = new ChatGptService(this.logger);
-//        this.logger.log("ChatGptService created");
         this.usersService = new UsersService(this.logger);
-//        this.logger.log("UsersService created");
-        if (!validate()) {
+        this.iMessageService = new IMessageService(this.logger);
+        if (!this.iMessageService.validate()) {
             return new APIGatewayProxyResponseEvent().withStatusCode(500);
         }
-//        this.logger.log("Validation passed");
         try {
             LoopMessageDto incomingRequest = this.gson.fromJson(requestEvent.getBody(), LoopMessageDto.class);
             if (!"message_inbound".equals(incomingRequest.getAlert_type())) {
@@ -82,12 +64,12 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
                             recipient.contains("@") ? recipient : null
                     )) {
                         this.logger.log("Group chat user does not exist");
-                        String bodyStr = this.gson.toJson(new LoopMessageRequest(
+                        LoopMessageRequest request = new LoopMessageRequest(
                            null, PLEASE_REGISTER_MESSAGE, senderName, groupId
-                        ));
-                        sendLoopMessage(bodyStr);
+                        );
+                        this.iMessageService.sendLoopMessage(request);
                         this.questionService = new QuestionService(this.logger);
-                        this.questionService.saveUnansweredQuestion(groupId, recipient, removeMention(incomingRequest.getText()), Channel.iMESSENGER);
+                        this.questionService.saveUnansweredQuestion(groupId, recipient, removeMention(incomingRequest.getText()), Channel.iMESSENGER, senderName);
                         return new APIGatewayProxyResponseEvent().withStatusCode(200);
                     } else {
                         this.logger.log("CONTINUE...");
@@ -106,49 +88,19 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
                     isGroupChat ? groupId : null
             ));
             this.logger.log("RESPONSE message: " + bodyStr);
-            sendLoopMessage(bodyStr);
+            this.iMessageService.sendLoopMessage(bodyStr);
         } catch (Exception e) {
             this.logger.log("ERROR: " + e.getMessage());
         }
         return new APIGatewayProxyResponseEvent().withStatusCode(200);
     }
 
-    private int sendLoopMessage(String bodyStr) throws IOException, InterruptedException {
-        HttpRequest loopMessageRequest = HttpRequest.newBuilder()
-                .uri(URI.create(LOOP_MESSAGE_API))
-                .header("Content-Type", "application/json")
-                .header("Authorization", this.loopMessageKeys.getAuthorizationKey())
-                .header("Loop-Secret-Key", this.loopMessageKeys.getSecretAPIKey())
-                .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
-                .build();
-        HttpResponse<String> res = client.send(loopMessageRequest, HttpResponse.BodyHandlers.ofString());
-        this.logger.log("STATUS CODE: " + res.statusCode());
-        return res.statusCode();
-    }
-
     private boolean containsMention(LoopMessageDto incomingRequest) {
         return incomingRequest.getText().contains("!") || incomingRequest.getText().contains("@x") || incomingRequest.getText().contains("@xchat");
-    }
-
-    private boolean validate() {
-        if (this.loopMessageKeys.getAuthorizationKey() == null || this.loopMessageKeys.getAuthorizationKey().isEmpty()) {
-            this.logger.log("[ERROR] Empty Loop Authorization Key");
-            return false;
-        }
-        if (this.loopMessageKeys.getSecretAPIKey() == null || this.loopMessageKeys.getSecretAPIKey().isEmpty()) {
-            this.logger.log("[ERROR] Empty Loop Secret Key");
-            return false;
-        }
-        return true;
     }
 
     private String removeMention(String text) {
         return text.replaceAll("@xchat", "").strip();
     }
 
-    private String getSecret(String name) {
-        return secretsManagerClient.getSecretValue(GetSecretValueRequest.builder()
-                .secretId(name)
-                .build()).secretString();
-    }
 }

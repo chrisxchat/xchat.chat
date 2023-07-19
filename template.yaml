@@ -5,11 +5,7 @@ Description: xChat App Description
 Globals:
   Function:
     Timeout: 10
-    MemorySize: 128
-    Environment:
-      Variables:
-        DYNAMO_USERS_TABLE: users_data
-        DYNAMO_UNANSWERED_QUESTIONS_TABLE: unanswered_questions
+    MemorySize: 512
 
 Resources:
   ChatGptEchoFunction:
@@ -24,7 +20,6 @@ Resources:
       Environment:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
-          OPENAI_ORG_ID: org-hjmTx18GgDpomxMwhp1Gs4rP
           WHATSAPP_PHONE_ID: 106487262422291
   WhatsappWebhookVerificationFunction:
     Type: AWS::Serverless::Function
@@ -51,7 +46,6 @@ Resources:
       Environment:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
-          OPENAI_ORG_ID: org-hjmTx18GgDpomxMwhp1Gs4rP
   UserRegistrationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -70,6 +64,18 @@ Resources:
     Properties:
       CodeUri: LoopMessageIMessagesFunction
       Handler: chat.xchat.LoopMessageIMessagesFunction::handleRequest
+      Runtime: java11
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Environment:
+        Variables:
+          JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
+  UnansweredQuestionsHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: UnansweredQuestionsHandlerFunction
+      Handler: chat.xchat.UnansweredQuestionsHandlerFunction::handleRequest
       Runtime: java11
       Architectures:
         - x86_64

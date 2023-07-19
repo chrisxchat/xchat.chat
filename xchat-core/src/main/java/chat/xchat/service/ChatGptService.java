@@ -6,7 +6,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -16,17 +15,20 @@ public class ChatGptService {
 
     private LambdaLogger logger;
 
-    private Gson gson = new Gson();
+    private Gson gson;
 
-    private HttpClient client = HttpClient.newHttpClient();
+    private HttpClient client;
 
-    private SecretService secretService = new SecretService();
+    private SecretService secretService;
 
     public ChatGptService(LambdaLogger logger) {
         this.logger = logger;
+        this.secretService = new SecretService();
+        this.client = HttpClient.newHttpClient();
+        this.gson = new Gson();
     }
 
-    public String askChatGpt(String message, Integer responseLimit) throws IOException, InterruptedException {
+    public String askChatGpt(String message, Integer responseLimit) {
         validateCredentials();
         String bodyStr = gson.toJson(new ChatGptRequest(message));
         logger.log("[ChatGPT] Asking: " + bodyStr);
@@ -37,26 +39,36 @@ public class ChatGptService {
                 .header("OpenAI-Organization", secretService.getChatGptCredentials().getOrgId())
                 .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
                 .build();
-        HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
-        JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
-        String response = obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
-        if (responseLimit == null) {
-            return response;
+        try {
+            HttpResponse<String> res = client.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonObject obj = JsonParser.parseString(res.body()).getAsJsonObject();
+            String response = obj.getAsJsonArray("choices").get(0).getAsJsonObject().get("message").getAsJsonObject().get("content").getAsString();
+            if (responseLimit == null) {
+                return response;
+            }
+            return response.length() > responseLimit ? response.substring(0, responseLimit) : response;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        return response.length() > responseLimit ? response.substring(0, responseLimit) : response;
     }
 
     private void validateCredentials() {
-        String apiKey = secretService.getChatGptCredentials().getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            this.logger.log("[ERROR] Can not get ChatGPT API key");
-            throw new RuntimeException("[ERROR] Can not get ChatGPT API key");
+        this.logger.log("Validating chat gpt credentials");
+        try {
+            String apiKey = secretService.getChatGptCredentials().getApiKey();
+            if (apiKey == null || apiKey.isBlank()) {
+                this.logger.log("[ERROR] Can not get ChatGPT API key");
+                throw new RuntimeException("[ERROR] Can not get ChatGPT API key");
+            }
+            String openaiOrgId = secretService.getChatGptCredentials().getOrgId();
+            if (openaiOrgId == null || openaiOrgId.isBlank()) {
+                this.logger.log("[ERROR] Can not get OPENAI_ORG_ID");
+                throw new RuntimeException("[ERROR] Can not get OPENAI_ORG_ID");
+            }
+        } catch (Throwable t) {
+            this.logger.log("Exception during chat gpt credentials validation " + t.getMessage());
         }
-        String openaiOrgId = secretService.getChatGptCredentials().getOrgId();
-        if (openaiOrgId == null || openaiOrgId.isBlank()) {
-            this.logger.log("[ERROR] Can not get OPENAI_ORG_ID");
-            throw new RuntimeException("[ERROR] Can not get OPENAI_ORG_ID");
-        }
+        this.logger.log("Chat gpt credentials validated");
     }
 
 }

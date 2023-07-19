@@ -44,12 +44,11 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 	private final String greetingMessage = "Welcome to xChat!\n" +
 			"\nThis is the first iteration of a new product that brings AI into your chat experience. Over time, we will improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.";
 
-	private final String DEVELOPER_NUMBER = "***";
+	private final String DEVELOPER_NUMBER = "0933506675";
 
 	@Override
 	public APIGatewayProxyResponseEvent handleRequest(Map<String, String> request, Context context) {
 		this.logger = context.getLogger();
-		this.usersService = new UsersService(this.logger);
 		String phone = request.get("phone");
 		if (!validateInputDataAndCredentials(phone)) {
 			return new APIGatewayProxyResponseEvent().withStatusCode(200);
@@ -61,10 +60,13 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 			phone = "1" + phone;
 		}
 		try {
-			this.usersService.save(request.get("username"), phone, request.get("email"));
+			this.usersService = new UsersService(this.logger);
+			this.usersService.save(request);
 			// send greeting messages
 			sendSms(phone, this.greetingMessage);
+			this.logger.log("Welcome SMS sent");
 			sendWhatsappMessage(phone, this.greetingMessage);
+			this.logger.log("Welcome Whatsapp message sent");
 			return new APIGatewayProxyResponseEvent().withBody("User " + phone + " registered").withStatusCode(200);
 		} catch (Exception e) {
 			this.logger.log("ERROR: " + e.getMessage());
@@ -79,7 +81,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 						new PhoneNumber(twilioCredentials.getTwilioSmsPhoneNumber()),
 						text)
 				.create();
-		this.logger.log("Message SID " + message.getSid());
+		this.logger.log("Message SID " + message.getSid() + ", error = " + message.getErrorMessage());
 	}
 
 	private void sendWhatsappMessage(String phone, String message) throws IOException, InterruptedException {
@@ -91,7 +93,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 				.header("Authorization", "Bearer " + this.whatsappToken)
 				.POST(HttpRequest.BodyPublishers.ofString(requestBody))
 				.build(), HttpResponse.BodyHandlers.ofString());
-		logger.log("[WHATSAPP] Message response with status: " +response.statusCode() + " and body: " + response.body());
+		logger.log("[WHATSAPP] Message response with status: " + response.statusCode() + " and body: " + response.body());
 	}
 
 	private String getSecret(String name) {
