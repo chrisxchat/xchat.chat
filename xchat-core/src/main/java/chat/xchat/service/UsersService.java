@@ -14,7 +14,10 @@ import java.util.stream.Collectors;
 
 public class UsersService {
 
-	private final static String USER_EXIST_SQL = "SELECT u.id FROM users_data u WHERE u.phone like ? OR u.email like ? LIMIT 1";
+	public static final String PLEASE_REGISTER_MESSAGE = "Hi, I see that you’re not yet registered with xChat. Register at https://xchat.chat for free and I’ll then be able to answer your question.";
+
+	private final static String USER_EXIST_BY_PHONE_OR_EMAIL_SQL = "SELECT u.id FROM users_data u WHERE u.phone like ? OR u.email like ? LIMIT 1";
+	private final static String USER_EXIST_BY_PHONE_SQL = "SELECT u.id FROM users_data u WHERE u.phone like ? LIMIT 1";
 	private final static String CREATE_USER_SQL = "INSERT INTO users_data (phone, email, first_name, last_name) VALUES (?, ?, ?, ?)";
 
 	private final static String PHONE = "phone";
@@ -32,12 +35,27 @@ public class UsersService {
 		this.logger.log("UsersService created");
 	}
 
+	public boolean exists(String phone) {
+		if (StringUtils.isBlank(phone)) {
+			throw new RuntimeException("Empty phone");
+		}
+		try (Connection connection = getConnection();
+			 PreparedStatement ps = connection.prepareStatement(USER_EXIST_BY_PHONE_SQL)) {
+			ps.setString(1, "%" + phone + "%");
+			ResultSet rs = ps.executeQuery();
+			return rs.next();
+		} catch (Exception e) {
+			this.logger.log("Can not check if user already registered " + e.getClass().getName() + ": " + e.getMessage());
+			throw new RuntimeException(e);
+		}
+	}
+
 	public boolean exists(String phone, String email) {
 		if (StringUtils.isBlank(phone) && StringUtils.isBlank(email)) {
 			throw new RuntimeException("Empty phone and email");
 		}
 		try (Connection connection = getConnection();
-			 PreparedStatement ps = connection.prepareStatement(USER_EXIST_SQL)) {
+			 PreparedStatement ps = connection.prepareStatement(USER_EXIST_BY_PHONE_OR_EMAIL_SQL)) {
 			ps.setString(1, "%" + phone + "%");
 			ps.setString(2, "%" + email + "%");
 			ResultSet rs = ps.executeQuery();

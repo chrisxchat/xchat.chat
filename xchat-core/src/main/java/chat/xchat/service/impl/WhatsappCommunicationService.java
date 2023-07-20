@@ -28,8 +28,8 @@ public class WhatsappCommunicationService implements CommunicationService {
 	}
 
 	@Override
-	public void sendUnansweredQuestion(UnansweredQuestion question, String answer) {
-
+	public void sendUnansweredQuestion(UnansweredQuestion question, String answer) throws IOException, InterruptedException {
+		sendMessage(question.getChatId(), answer);
 	}
 
 	@Override

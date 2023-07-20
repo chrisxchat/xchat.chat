@@ -8,11 +8,11 @@ Globals:
     MemorySize: 512
 
 Resources:
-  ChatGptEchoFunction:
+  WhatsappFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ChatGptEchoFunction
-      Handler: chat.xchat.ChatGptEchoFunction::handleRequest
+      CodeUri: WhatsappFunction
+      Handler: chat.xchat.WhatsappFunction::handleRequest
       Runtime: java11
       Architectures:
         - x86_64
@@ -81,11 +81,3 @@ Resources:
       Environment:
         Variables:
           JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
-
-Outputs:
-  ChatGptEchoFunction:
-    Description: "ChatGpt Echo Lambda Function ARN"
-    Value: !GetAtt ChatGptEchoFunction.Arn
-  ChatGptEchoFunctionIamRole:
-    Description: "Implicit IAM Role created for ChatGpt Echo function"
-    Value: !GetAtt ChatGptEchoFunctionRole.Arn

@@ -6,6 +6,8 @@ import chat.xchat.service.ChatGptService;
 import chat.xchat.service.CommunicationService;
 import chat.xchat.service.impl.IMessageService;
 import chat.xchat.service.QuestionService;
+import chat.xchat.service.impl.SmsCommunicationService;
+import chat.xchat.service.impl.WhatsappCommunicationService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -14,6 +16,7 @@ import software.amazon.awssdk.utils.StringUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<String, String>, APIGatewayProxyResponseEvent> {
@@ -21,6 +24,8 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 	private LambdaLogger logger;
 	private QuestionService questionService;
 	private IMessageService iMessageService;
+	private WhatsappCommunicationService whatsappService;
+	private SmsCommunicationService smsService;
 	private ChatGptService chatGptService;
 
 	@Override
@@ -43,18 +48,26 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 		this.chatGptService = new ChatGptService(this.logger);
 		this.logger.log("ChatGptService created");
 		List<Long> ids = unansweredQuestions.parallelStream()
-				.map(q -> {
-					String question = q.getQuestion();
-					this.logger.log("Answering question " + question);
-					String answer = this.chatGptService.askChatGpt(question, null);
-					this.logger.log("ChatGPT Answer: " + answer);
-					getService(q.getChannel()).sendUnansweredQuestion(q, answer);
-					return q.getId();
-				})
+				.map(this::handleQuestion)
+				.filter(Objects::nonNull)
 				.collect(Collectors.toList());
 		this.questionService.delete(ids);
 		this.logger.log(ids.size() + " Unanswered questions deleted");
 		return new APIGatewayProxyResponseEvent().withStatusCode(200);
+	}
+
+	private Long handleQuestion(UnansweredQuestion q) {
+		String question = q.getQuestion();
+		this.logger.log("Answering question " + question);
+		try {
+			String answer = this.chatGptService.askChatGpt(question, null);
+			this.logger.log("ChatGPT Answer: " + answer);
+			getService(q.getChannel()).sendUnansweredQuestion(q, answer);
+		} catch (Exception e) {
+			this.logger.log("Can not handle question #" + q.getId());
+			return null;
+		}
+		return q.getId();
 	}
 
 	private CommunicationService getService(Channel channel) {
@@ -64,6 +77,18 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 					this.iMessageService = new IMessageService(this.logger);
 				}
 				return this.iMessageService;
+			}
+			case WHATSAPP: {
+				if (this.whatsappService == null) {
+					this.whatsappService = new WhatsappCommunicationService(this.logger);
+				}
+				return this.whatsappService;
+			}
+			case SMS: {
+				if (this.smsService == null) {
+					this.smsService = new SmsCommunicationService(this.logger);
+				}
+				return this.smsService;
 			}
 			default: {
 				this.logger.log("Unsupported channel " + channel);

@@ -6,7 +6,7 @@ import java.io.IOException;
 
 public interface CommunicationService {
 
-	void sendUnansweredQuestion(UnansweredQuestion question, String answer);
+	void sendUnansweredQuestion(UnansweredQuestion question, String answer) throws IOException, InterruptedException;
 
 	void sendMessage(String phone, String message) throws IOException, InterruptedException;
 

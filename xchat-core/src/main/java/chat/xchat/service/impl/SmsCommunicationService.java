@@ -9,8 +9,6 @@ import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
 
-import java.io.IOException;
-
 public class SmsCommunicationService implements CommunicationService {
 
 	private LambdaLogger logger;
@@ -24,7 +22,7 @@ public class SmsCommunicationService implements CommunicationService {
 
 	@Override
 	public void sendUnansweredQuestion(UnansweredQuestion question, String answer) {
-
+		sendMessage(question.getChatId(), answer);
 	}
 
 	@Override
