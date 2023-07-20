@@ -2,13 +2,17 @@ package chat.xchat;
 
 
 import chat.xchat.dto.SmsRequest;
+import chat.xchat.enums.Channel;
 import chat.xchat.service.ChatGptService;
+import chat.xchat.service.QuestionService;
+import chat.xchat.service.UsersService;
 import chat.xchat.service.impl.SmsCommunicationService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
+import software.amazon.awssdk.utils.StringUtils;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -17,19 +21,26 @@ import java.util.Base64;
 public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
 	private LambdaLogger logger;
-
-	private ChatGptService chatGptService;
+	private SmsCommunicationService smsService;
 
 	@Override
 	public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent req, Context context) {
 		this.logger = context.getLogger();
-		this.chatGptService = new ChatGptService(this.logger);
 
 		SmsRequest sms = extractMessage(req.getBody());
-
+		String message = sms.getBody();
+		if (StringUtils.isBlank(message)) {
+			return new APIGatewayProxyResponseEvent().withStatusCode(200);
+		}
+		String phone = sms.getNumber();
+		if (!new UsersService(this.logger).exists(phone)) {
+			new QuestionService(this.logger).saveUnansweredQuestion(phone, phone, message, Channel.SMS, null);
+			getSmsService().sendMessage(phone, UsersService.PLEASE_REGISTER_MESSAGE);
+			return new APIGatewayProxyResponseEvent().withStatusCode(200);
+		}
 		String chatGptResponse = null;
 		try {
-			chatGptResponse = this.chatGptService.askChatGpt(sms.getBody(), null);
+			chatGptResponse = new ChatGptService(this.logger).askChatGpt(message, null);
 			if (chatGptResponse.isBlank()) {
 				throw new RuntimeException("ChatGPT response is blank");
 			}
@@ -37,7 +48,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 			this.logger.log("ERROR: " + e.getMessage());
 			return new APIGatewayProxyResponseEvent().withStatusCode(200);
 		}
-		new SmsCommunicationService(this.logger).sendMessage(sms.getNumber(), chatGptResponse);
+		new SmsCommunicationService(this.logger).sendMessage(phone, chatGptResponse);
 
 		return new APIGatewayProxyResponseEvent().withStatusCode(200);
 	}
@@ -64,6 +75,13 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 		request.setNumber(number);
 		request.setBody(body);
 		return request;
+	}
+
+	private SmsCommunicationService getSmsService() {
+		if (this.smsService == null) {
+			this.smsService = new SmsCommunicationService(this.logger);
+		}
+		return this.smsService;
 	}
 
 }
