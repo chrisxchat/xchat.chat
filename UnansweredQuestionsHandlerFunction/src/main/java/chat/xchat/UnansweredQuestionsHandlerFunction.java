@@ -7,6 +7,7 @@ import chat.xchat.service.CommunicationService;
 import chat.xchat.service.impl.IMessageService;
 import chat.xchat.service.QuestionService;
 import chat.xchat.service.impl.SmsCommunicationService;
+import chat.xchat.service.impl.TwilioWhatsappCommunicationService;
 import chat.xchat.service.impl.WhatsappCommunicationService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
@@ -26,6 +27,7 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 	private IMessageService iMessageService;
 	private WhatsappCommunicationService whatsappService;
 	private SmsCommunicationService smsService;
+	private TwilioWhatsappCommunicationService twilioWhatsappService;
 	private ChatGptService chatGptService;
 
 	@Override
@@ -89,6 +91,12 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 					this.smsService = new SmsCommunicationService(this.logger);
 				}
 				return this.smsService;
+			}
+			case TWILIO_WHATSAPP: {
+				if (this.twilioWhatsappService == null) {
+					this.twilioWhatsappService = new TwilioWhatsappCommunicationService(this.logger);
+				}
+				return this.twilioWhatsappService;
 			}
 			default: {
 				this.logger.log("Unsupported channel " + channel);

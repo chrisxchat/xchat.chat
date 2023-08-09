@@ -4,7 +4,7 @@ Description: xChat App Description
 
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 20
     MemorySize: 512
 
 Resources:
@@ -38,6 +38,18 @@ Resources:
     Properties:
       CodeUri: TwilioSmsFunction
       Handler: chat.xchat.TwilioSmsFunction::handleRequest
+      Runtime: java11
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Environment:
+        Variables:
+          JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
+  TwilioWhatsappFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: TwilioWhatsappFunction
+      Handler: chat.xchat.TwilioWhatsappFunction::handleRequest
       Runtime: java11
       Architectures:
         - x86_64

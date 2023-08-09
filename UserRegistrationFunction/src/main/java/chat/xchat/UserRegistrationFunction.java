@@ -3,7 +3,7 @@ package chat.xchat;
 
 import chat.xchat.service.UsersService;
 import chat.xchat.service.impl.SmsCommunicationService;
-import chat.xchat.service.impl.WhatsappCommunicationService;
+import chat.xchat.service.impl.TwilioWhatsappCommunicationService;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -17,8 +17,10 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 
 	private UsersService usersService;
 
-	private final String greetingMessage = "Welcome to xChat!\n" +
-			"\nThis is the first iteration of a new product that brings AI into your chat experience. Over time, we will improve this product to be trainable, internet connected, and able to perform tasks like make reservations and handle payments for you. For now, text any question or request and ChatGPT will quickly respond.";
+	// DO NOT CHANGE THIS!!!
+	// This text is used as approved WhatsApp template
+	private static final String greetingMessage = "Welcome to xChat!\n" +
+			"This is the first iteration of a new product that brings AI into your chat experience. Over time, we will improve this product to be trainable, internet-connected, and able to perform tasks like making reservations and handling payments for you. For now, text any question or request and ChatGPT will quickly respond.";
 
 	private final String DEVELOPER_NUMBER = "0933506675";
 
@@ -40,7 +42,7 @@ public class UserRegistrationFunction implements RequestHandler<Map<String, Stri
 			// send greeting messages
 			new SmsCommunicationService(this.logger).sendMessage(phone, this.greetingMessage);
 			this.logger.log("Welcome SMS sent");
-			new WhatsappCommunicationService(this.logger).sendMessage(phone, this.greetingMessage);
+			new TwilioWhatsappCommunicationService(this.logger).sendMessage(phone, this.greetingMessage);
 			this.logger.log("Welcome Whatsapp message sent");
 			return new APIGatewayProxyResponseEvent().withBody("User " + phone + " registered").withStatusCode(200);
 		} catch (Exception e) {
