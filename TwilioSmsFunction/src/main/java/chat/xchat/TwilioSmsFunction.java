@@ -32,7 +32,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 		this.logger = context.getLogger();
 
 		TwilioRequest sms = extractMessage(req.getBody());
-		this.logger.log("Extracted message obj: " + sms);
+		this.logger.log("Extracted message obj " + sms);
 		String message = sms.getBody();
 		if (StringUtils.isBlank(message)) {
 			return new APIGatewayProxyResponseEvent().withStatusCode(200);
@@ -42,6 +42,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 		}
 		String phone = sms.getNumber();
 		if (!new UsersService(this.logger).exists(phone)) {
+			this.logger.log("Found unregistered user");
 			new QuestionService(this.logger).saveUnansweredQuestion(phone, phone, message, Channel.SMS, null);
 			try {
 				getCommunicationService(sms).sendMessage(phone, UsersService.PLEASE_REGISTER_MESSAGE);
@@ -53,7 +54,7 @@ public class TwilioSmsFunction implements RequestHandler<APIGatewayProxyRequestE
 		}
 		String chatGptResponse = null;
 		try {
-			chatGptResponse = new ChatGptService(this.logger).askChatGpt(message, null);
+			chatGptResponse = new ChatGptService(this.logger).askChatGpt(phone, message, null);
 			if (chatGptResponse.isBlank()) {
 				throw new RuntimeException("ChatGPT response is blank");
 			}

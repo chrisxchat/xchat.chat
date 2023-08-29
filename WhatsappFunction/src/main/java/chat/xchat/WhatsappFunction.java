@@ -47,7 +47,7 @@ public class WhatsappFunction implements RequestHandler<Map<String, String>, API
 				getWhatsappService().sendMessage(phone, UsersService.PLEASE_REGISTER_MESSAGE);
 				return response.withStatusCode(200);
 			}
-			String chatGptResponse = new ChatGptService(this.logger).askChatGpt(message, null);
+			String chatGptResponse = new ChatGptService(this.logger).askChatGpt(phone, message, null);
 			getWhatsappService().sendMessage(phone, chatGptResponse);
 		} catch (Exception e) {
 			logger.log("Can not handle whatsapp message" + e.getClass().getName() + ": " + e.getMessage());

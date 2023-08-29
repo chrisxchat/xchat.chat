@@ -24,6 +24,14 @@ public class SecretService {
 	private static final String DATABASE_NAME = "DATABASE_NAME";
 	private static final String CHAT_GPT_API_KEY = "CHAT_GPT_API_KEY";
 	private static final String CHAT_GPT_ORG_ID = "CHAT_GPT_ORG_ID";
+	private static final String LOOP_MESSAGE_AUTH_KEY = "LOOP_MESSAGE_AUTH_KEY";
+	private static final String LOOP_MESSAGE_SECRET_API_KEY = "LOOP_MESSAGE_SECRET_API_KEY";
+	private static final String TWILIO_ACCOUNT_SID = "TWILIO_ACCOUNT_SID";
+	private static final String TWILIO_AUTH_TOKEN = "TWILIO_AUTH_TOKEN";
+	private static final String TWILIO_SMS_PHONE_NUMBER = "TWILIO_SMS_PHONE_NUMBER";
+	private static final String TWILIO_WHATSAPP_PHONE_NUMBER = "TWILIO_WHATSAPP_PHONE_NUMBER";
+	private static final String WHATSAPP_TOKEN = "WHATSAPP_TOKEN";
+	private static final String WHATSAPP_PHONE_ID = "WHATSAPP_PHONE_ID";
 
 	private final Gson gson = new Gson();
 	private SecretsManagerClient secretsManagerClient;
@@ -36,21 +44,33 @@ public class SecretService {
 
 	public LoopMessageKeys getLoopMessageKeys() {
 		if (this.loopMessageKeys == null) {
-			this.loopMessageKeys = gson.fromJson(getSecret(LOOP_MESSAGE_CREDENTIALS), LoopMessageKeys.class);
+			if (System.getenv(LOOP_MESSAGE_AUTH_KEY) == null) {
+				this.loopMessageKeys = gson.fromJson(getSecret(LOOP_MESSAGE_CREDENTIALS), LoopMessageKeys.class);
+			} else {
+				this.loopMessageKeys = getLoopMessageKeysFromEnv();
+			}
 		}
 		return this.loopMessageKeys;
 	}
 
 	public TwilioCredentials getTwilioCredentials() {
 		if (this.twilioCredentials == null) {
-			this.twilioCredentials = gson.fromJson(getSecret(TWILIO_CREDENTIALS), TwilioCredentials.class);
+			if (System.getenv(TWILIO_ACCOUNT_SID) == null) {
+				this.twilioCredentials = gson.fromJson(getSecret(TWILIO_CREDENTIALS), TwilioCredentials.class);
+			} else {
+				this.twilioCredentials = getTwilioKeysFromEnv();
+			}
 		}
 		return this.twilioCredentials;
 	}
 
 	public WhatsappCredentials getWhatsappCredentials() {
 		if (this.whatsappCredentials == null) {
-			this.whatsappCredentials = gson.fromJson(getSecret(WHATSAPP_CREDENTIALS), WhatsappCredentials.class);
+			if (System.getenv(WHATSAPP_TOKEN) == null) {
+				this.whatsappCredentials = gson.fromJson(getSecret(WHATSAPP_CREDENTIALS), WhatsappCredentials.class);
+			} else {
+				this.whatsappCredentials = getWhatsappKeysFromEnv();
+			}
 		}
 		return this.whatsappCredentials;
 	}
@@ -107,6 +127,29 @@ public class SecretService {
 		result.setApiKey(System.getenv(CHAT_GPT_API_KEY));
 		result.setOrgId(System.getenv(CHAT_GPT_ORG_ID));
 		return result;
+	}
+
+	private LoopMessageKeys getLoopMessageKeysFromEnv() {
+		var result = new LoopMessageKeys();
+		result.setAuthorizationKey(System.getenv(LOOP_MESSAGE_AUTH_KEY));
+		result.setSecretAPIKey(System.getenv(LOOP_MESSAGE_SECRET_API_KEY));
+		return result;
+	}
+
+	private TwilioCredentials getTwilioKeysFromEnv() {
+		var res = new TwilioCredentials();
+		res.setTwilioAccountSID(System.getenv(TWILIO_ACCOUNT_SID));
+		res.setTwilioAuthToken(System.getenv(TWILIO_AUTH_TOKEN));
+		res.setTwilioSmsPhoneNumber(System.getenv(TWILIO_SMS_PHONE_NUMBER));
+		res.setTwilioWhatsAppPhoneNumber(System.getenv(TWILIO_WHATSAPP_PHONE_NUMBER));
+		return res;
+	}
+
+	private WhatsappCredentials getWhatsappKeysFromEnv() {
+		var res = new WhatsappCredentials();
+		res.setToken(System.getenv(WHATSAPP_TOKEN));
+		res.setPhoneId(System.getenv(WHATSAPP_PHONE_ID));
+		return res;
 	}
 
 }

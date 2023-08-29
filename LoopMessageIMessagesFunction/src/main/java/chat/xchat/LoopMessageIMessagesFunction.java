@@ -35,15 +35,18 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
 	public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent requestEvent, Context context) {
 		this.logger = context.getLogger();
 		this.logger.log("REQUEST: " + requestEvent.getBody());
-		this.chatGptService = new ChatGptService(this.logger);
-		this.usersService = new UsersService(this.logger);
-		this.iMessageService = new IMessageService(this.logger);
 		try {
 			LoopMessageDto incomingRequest = this.gson.fromJson(requestEvent.getBody(), LoopMessageDto.class);
 			if (!"message_inbound".equals(incomingRequest.getAlert_type())) {
 				this.logger.log("Alert type not supported");
 				return new APIGatewayProxyResponseEvent().withStatusCode(200);
 			}
+			this.chatGptService = new ChatGptService(this.logger);
+			if (this.chatGptService.messageExists(incomingRequest.getMessage_id())) {
+				this.logger.log("Message " + incomingRequest.getMessage_id() + " already received");
+				return new APIGatewayProxyResponseEvent().withStatusCode(200);
+			}
+			this.logger.log("Received new message " + incomingRequest.getMessage_id());
 			String recipient = incomingRequest.getRecipient();
 			if (recipient.startsWith("\\+")) {
 				recipient = recipient.replaceAll("\\+", "");
@@ -51,11 +54,13 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
 			String senderName = incomingRequest.getSender_name();
 			boolean isGroupChat = incomingRequest.getGroup() != null;
 			String groupId = Optional.ofNullable(incomingRequest.getGroup()).map(LoopGroup::getGroup_id).orElse(null);
+			this.iMessageService = new IMessageService(this.logger);
 			if (isGroupChat) {
 				this.logger.log("Request from group chat");
 				if (containsMention(incomingRequest)) {
 					// validate if user exist
 					this.logger.log("Group chat request contains mention");
+					this.usersService = new UsersService(this.logger);
 					if (!this.usersService.exists(
 							recipient.contains("@") ? null : recipient,
 							recipient.contains("@") ? recipient : null
@@ -77,7 +82,12 @@ public class LoopMessageIMessagesFunction implements RequestHandler<APIGatewayPr
 					return new APIGatewayProxyResponseEvent().withStatusCode(200);
 				}
 			}
-			String chatGptResponse = this.chatGptService.askChatGpt(incomingRequest.getText(), MESSAGE_MAX_SYMBOLS);
+			String chatGptResponse = this.chatGptService.askChatGpt(
+					Optional.ofNullable(groupId).orElse(recipient),
+					incomingRequest.getText(),
+					incomingRequest.getMessage_id(),
+					MESSAGE_MAX_SYMBOLS
+			);
 			String bodyStr = this.gson.toJson(new LoopMessageRequest(
 					isGroupChat ? null : recipient,
 					chatGptResponse,

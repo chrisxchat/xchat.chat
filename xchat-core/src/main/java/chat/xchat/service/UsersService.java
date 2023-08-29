@@ -37,15 +37,17 @@ public class UsersService {
 
 	public boolean exists(String phone) {
 		if (StringUtils.isBlank(phone)) {
+			this.logger.log("[UsersService] Empty phone");
 			throw new RuntimeException("Empty phone");
 		}
 		try (Connection connection = getConnection();
 			 PreparedStatement ps = connection.prepareStatement(USER_EXIST_BY_PHONE_SQL)) {
+			this.logger.log("[UsersService] SQL built for phone " + phone);
 			ps.setString(1, "%" + phone + "%");
 			ResultSet rs = ps.executeQuery();
 			return rs.next();
 		} catch (Exception e) {
-			this.logger.log("Can not check if user already registered " + e.getClass().getName() + ": " + e.getMessage());
+			this.logger.log("[UsersService] Can not check if user already registered " + e.getClass().getName() + ": " + e.getMessage());
 			throw new RuntimeException(e);
 		}
 	}

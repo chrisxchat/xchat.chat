@@ -62,7 +62,7 @@ public class UnansweredQuestionsHandlerFunction implements RequestHandler<Map<St
 		String question = q.getQuestion();
 		this.logger.log("Answering question " + question);
 		try {
-			String answer = this.chatGptService.askChatGpt(question, null);
+			String answer = this.chatGptService.askChatGpt(q.getChatId(), question, null);
 			this.logger.log("ChatGPT Answer: " + answer);
 			getService(q.getChannel()).sendUnansweredQuestion(q, answer);
 		} catch (Exception e) {

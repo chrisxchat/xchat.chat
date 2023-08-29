@@ -54,7 +54,7 @@ public class TwilioWhatsappFunction implements RequestHandler<APIGatewayProxyReq
 				getWhatsappService().sendMessage(toNumber, UsersService.PLEASE_REGISTER_MESSAGE);
 				return response.withStatusCode(200);
 			}
-			String chatGptResponse = new ChatGptService(this.logger).askChatGpt(body, null);
+			String chatGptResponse = new ChatGptService(this.logger).askChatGpt(toNumber, body, null);
 			getWhatsappService().sendMessage(toNumber, chatGptResponse);
 		} catch (Exception e) {
 			logger.log("Can not handle whatsapp message" + e.getClass().getName() + ": " + e.getMessage());

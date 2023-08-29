@@ -1,7 +1,6 @@
 package chat.xchat.dto;
 
 
-import java.util.Collections;
 import java.util.List;
 
 public class ChatGptRequest {
@@ -11,9 +10,12 @@ public class ChatGptRequest {
 	private List<ChatGptMessage> messages;
 	private Double temperature = 0.7;
 	private Integer max_tokens = 100;
+	private Integer top_p = 1;
+	private Integer frequency_penalty = 0;
+	private Integer presence_penalty = 0;
 
-	public ChatGptRequest(String message) {
-		this.messages = Collections.singletonList(new ChatGptMessage(message));
+	public ChatGptRequest(List<ChatGptMessage> messages) {
+		this.messages = messages;
 	}
 
 	public String getModel() {
@@ -47,32 +49,28 @@ public class ChatGptRequest {
 	public void setMessages(List<ChatGptMessage> messages) {
 		this.messages = messages;
 	}
-}
 
-class ChatGptMessage {
-	private String role = "user";
-	private String content;
-
-	public ChatGptMessage() {
+	public Integer getTop_p() {
+		return top_p;
 	}
 
-	public ChatGptMessage(String content) {
-		this.content = content;
+	public void setTop_p(Integer top_p) {
+		this.top_p = top_p;
 	}
 
-	public String getRole() {
-		return role;
+	public Integer getFrequency_penalty() {
+		return frequency_penalty;
 	}
 
-	public void setRole(String role) {
-		this.role = role;
+	public void setFrequency_penalty(Integer frequency_penalty) {
+		this.frequency_penalty = frequency_penalty;
 	}
 
-	public String getContent() {
-		return content;
+	public Integer getPresence_penalty() {
+		return presence_penalty;
 	}
 
-	public void setContent(String content) {
-		this.content = content;
+	public void setPresence_penalty(Integer presence_penalty) {
+		this.presence_penalty = presence_penalty;
 	}
 }
